@@ -1,0 +1,31 @@
+name: Test Email SMTP
+
+on:
+  workflow_dispatch:  # Permite ejecutarlo manualmente desde GitHub Actions
+
+jobs:
+  test-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send test email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "✅ SMTP test from GitHub Actions"
+          from: ${{ secrets.SMTP_USERNAME }}
+          to: ${{ secrets.TO_EMAIL }}
+          body: |
+            Hola Rodolfo 👋
+
+            Este es un correo de prueba enviado desde GitHub Actions usando:
+            - SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+            - Repositorio: ${{ github.repository }}
+            - Workflow: ${{ github.workflow }}
+
+            Si recibes este correo, tu configuración SMTP está funcionando correctamente.
+

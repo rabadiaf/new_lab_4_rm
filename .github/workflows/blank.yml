@@ -29,6 +29,9 @@ jobs:
       - name: Create deployment
         run: kubectl apply -f deployment.yml
 
+      - name: Describe deployment 
+        run: kubectl describe deploy my-app7
+
       # Runs a set of commands using the runners shell
       - name: Create pod
         run: |

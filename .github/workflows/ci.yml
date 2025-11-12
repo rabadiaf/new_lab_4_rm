@@ -1,4 +1,4 @@
-name: CI
+name: CI_Primary
 
 # Controls when the workflow will run
 on:
@@ -24,5 +24,5 @@ jobs:
       - uses: actions/checkout@v4
 
       # Runs a single command using the runners shell
-      - name: Create deployment
+      - name: It was the first file
         run: echo Job completed

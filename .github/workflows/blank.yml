@@ -97,19 +97,19 @@ jobs:
           name: all-reports
           path: reports/
 
+      # ---- EMAIL OK: usa @v6, STARTTLS 587 y from=username ----
       - name: Email reports (Trivy + Pods)
         if: always()
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v6
         with:
           server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "CI Report – ${{ github.repository }} #${{ github.run_number }}"
-          from: ${{ secrets.FROM_EMAIL }}
-          to: ${{ secrets.TO_EMAIL }}
-          content_type: text/plain
+          server_port: 587              # STARTTLS (más compatible)
+          secure: false                 # la acción negocia STARTTLS
+          username: ${{ secrets.SMTP_USERNAME }}   # ej: rabadiaf@gmail.com
+          password: ${{ secrets.SMTP_PASSWORD }}   # App Password (16 chars, sin espacios)
+          from:     ${{ secrets.SMTP_USERNAME }}   # igual que username
+          to:       ${{ secrets.TO_EMAIL }}        # ej: rabadiaf@gmail.com
+          subject:  "CI Report – ${{ github.repository }} #${{ github.run_number }}"
           body: |
             ✅ CI/CD Run Summary:
             Repository: ${{ github.repository }}
@@ -126,4 +126,6 @@ jobs:
             reports/trivy_fs.txt
             reports/trivy_image.txt
             reports/pods.txt
+          nodemailerlog: true
+          nodemailerdebug: true
 

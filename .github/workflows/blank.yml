@@ -12,14 +12,16 @@ jobs:
     runs-on: self-hosted
 
     env:
-      DEPLOYMENT_NAME: my-app7
+      DEPLOYMENT_NAME: my-app5
       IMAGE_NAME: rabadiaf/k8s-lab:latest
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Cache estable de la DB de Trivy (no depende de cambios en archivos)
+      # Cache estable para Trivy
       - name: Cache Trivy DB
         uses: actions/cache@v4
         with:
@@ -39,7 +41,6 @@ jobs:
             sudo apt-get install -y trivy
           fi
 
-      # Scan del repo y manifiestos
       - name: Trivy FS scan (repo & manifests)
         run: |
           trivy fs \
@@ -50,12 +51,10 @@ jobs:
             --no-progress \
             .
 
-      # Build de la imagen Docker local
       - name: Build Docker image
         run: |
           docker build -t $IMAGE_NAME .
 
-      # Scan de la imagen Docker construida
       - name: Trivy image scan
         run: |
           trivy image \
@@ -66,21 +65,15 @@ jobs:
             --no-progress \
             $IMAGE_NAME
 
-      # Push a Docker Hub (usa usuario y password)
+      # Login a Docker Hub usando secrets del repo
       - name: Login to Docker Hub
-        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_PASSWORD
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
         run: |
-          echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          docker login -u "$DOCKERHUB_USERNAME" --password-stdin <<< "$DOCKERHUB_PASSWORD"
 
       - name: Push image
-        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_PASSWORD
         run: |
           docker push $IMAGE_NAME
-  
-      # Deploy solo si todo lo anterior pasó
+
       - name: Apply deployment
         run: kubectl apply -f deployment.yml
 

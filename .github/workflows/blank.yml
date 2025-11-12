@@ -11,20 +11,23 @@ jobs:
   build:
     runs-on: self-hosted
 
+    env:
+      DEPLOYMENT_NAME: my-app7
+      IMAGE_NAME: rabadiaf/k8s-lab:latest   # ajusta si querés otro nombre
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Cache de la base de datos de Trivy para acelerar los siguientes runs
+      # Cache DB de Trivy (sirve para fs + image scan)
       - name: Cache Trivy DB
         uses: actions/cache@v4
         with:
           path: ~/.cache/trivy
-          key: trivy-db-${{ runner.os }}-${{ hashFiles('deployment.yml', 'pod.yml') }}
+          key: trivy-db-${{ runner.os }}-${{ hashFiles('deployment.yml', 'pod.yml', 'Dockerfile') }}
           restore-keys: |
             trivy-db-${{ runner.os }}-
 
-      # Instala Trivy solo si no está instalado en el runner
       - name: Install Trivy (if not present)
         run: |
           if ! command -v trivy >/dev/null 2>&1; then
@@ -36,8 +39,8 @@ jobs:
             sudo apt-get install -y trivy
           fi
 
-      # Scan del repo y manifiestos antes de desplegar
-      - name: Trivy FS scan (manifests & repo)
+      # 1) Scan del código / manifests
+      - name: Trivy FS scan (repo & manifests)
         run: |
           trivy fs \
             --severity HIGH,CRITICAL \
@@ -45,15 +48,33 @@ jobs:
             --no-progress \
             .
 
-      # Si Trivy encuentra HIGH/CRITICAL, esta parte NO se ejecuta
+      # 2) Build de la imagen Docker
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME .
+
+      # 3) Scan de la imagen Docker
+      - name: Trivy image scan
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --no-progress \
+            $IMAGE_NAME
+
+      # Si TODO lo anterior pasa, recién ahí desplegamos
+
       - name: Create deployment
         run: kubectl apply -f deployment.yml
 
       - name: Describe deployment
-        run: kubectl describe deploy my-app7
+        run: kubectl describe deploy $DEPLOYMENT_NAME
 
       - name: Create pod
         run: |
           echo "Creating the pod"
           kubectl apply -f pod.yml
+
+      - name: Get pods
+        run: kubectl get pods -o wide
 

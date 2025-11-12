@@ -5,7 +5,7 @@ on:
 
 jobs:
   test-email:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Send test email

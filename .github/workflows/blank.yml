@@ -66,20 +66,20 @@ jobs:
             --no-progress \
             $IMAGE_NAME
 
-      # (Opcional) Push a Docker Hub - requiere secrets configurados
+      # Push a Docker Hub (usa usuario y password)
       - name: Login to Docker Hub
-        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_TOKEN
+        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_PASSWORD
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
         run: |
-          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
       - name: Push image
-        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_TOKEN
+        if: env.DOCKERHUB_USERNAME && env.DOCKERHUB_PASSWORD
         run: |
           docker push $IMAGE_NAME
-
+  
       # Deploy solo si todo lo anterior pasó
       - name: Apply deployment
         run: kubectl apply -f deployment.yml

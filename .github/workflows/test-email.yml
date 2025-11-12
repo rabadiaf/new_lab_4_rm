@@ -1,31 +1,29 @@
 name: Test Email SMTP
 
 on:
-  workflow_dispatch:  # Permite ejecutarlo manualmente desde GitHub Actions
+  workflow_dispatch:
 
 jobs:
   test-email:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Send test email
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@2c6ab9ca0c19542db87edf927b889f4d7db97ef9
         with:
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "✅ SMTP test from GitHub Actions"
+          subject: "✅ SMTP test from self-hosted runner"
           from: ${{ secrets.SMTP_USERNAME }}
           to: ${{ secrets.TO_EMAIL }}
+          content_type: text/plain
           body: |
             Hola Rodolfo 👋
-
-            Este es un correo de prueba enviado desde GitHub Actions usando:
-            - SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-            - Repositorio: ${{ github.repository }}
-            - Workflow: ${{ github.workflow }}
-
-            Si recibes este correo, tu configuración SMTP está funcionando correctamente.
+            Self-hosted runner OK. Si recibes esto, el SMTP funciona.
+            Runner: ${{ runner.name }}
+            Repo:   ${{ github.repository }}
+            Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 

@@ -1,0 +1,86 @@
+name: Test Email (dual paths)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  smtp_connectivity:
+    name: Check SMTP connectivity
+    runs-on: self-hosted
+    steps:
+      - name: Test TCP to smtp.gmail.com
+        run: |
+          echo "Probar 587 (STARTTLS)..."
+          timeout 5 bash -lc 'exec 3<>/dev/tcp/smtp.gmail.com/587' && echo "OK 587" || (echo "FAIL 587"; exit 1)
+          echo "Probar 465 (SSL)..."
+          timeout 5 bash -lc 'exec 3<>/dev/tcp/smtp.gmail.com/465' && echo "OK 465" || echo "WARN 465 (si 587 OK, continua)"
+
+  email_via_action:
+    name: Send mail via action @v6
+    runs-on: self-hosted
+    needs: smtp_connectivity
+    steps:
+      - name: Send test email (STARTTLS 587)
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587            # STARTTLS
+          secure: false               # la acción negocia STARTTLS
+          username: ${{ secrets.SMTP_USERNAME }}  # ej: rabadiaf@gmail.com
+          password: ${{ secrets.SMTP_PASSWORD }}  # App Password (16 chars, sin espacios)
+          from:     ${{ secrets.SMTP_USERNAME }}  # mismo que username
+          to:       ${{ secrets.TO_EMAIL }}       # ej: rabadiaf@gmail.com
+          subject:  "✅ SMTP test via action @v6"
+          body: |
+            Hola Rodolfo,
+            Este correo fue enviado con dawidd6/action-send-mail@v6 usando STARTTLS (587).
+            Repo:  ${{ github.repository }}
+            Run:   ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          nodemailerdebug: true
+          nodemailerlog: true
+
+  email_via_python:
+    name: Send mail via Python (no marketplace action)
+    runs-on: self-hosted
+    needs: smtp_connectivity
+    steps:
+      - name: Send test email with smtplib (STARTTLS 587)
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USERNAME }}   # ej: rabadiaf@gmail.com
+          SMTP_PASS: ${{ secrets.SMTP_PASSWORD }}   # App Password
+          TO_EMAIL:  ${{ secrets.TO_EMAIL }}        # ej: rabadiaf@gmail.com
+        run: |
+          python3 - <<'PY'
+          import os, smtplib, ssl
+          from email.message import EmailMessage
+
+          user = os.environ["SMTP_USER"]
+          pwd  = os.environ["SMTP_PASS"]
+          to   = os.environ["TO_EMAIL"]
+
+          msg = EmailMessage()
+          msg["Subject"] = "✅ SMTP test via Python (STARTTLS 587)"
+          msg["From"] = user
+          msg["To"] = to
+          msg.set_content(
+              "Hola Rodolfo,\n"
+              "Este correo se envió con smtplib (sin acción externa), STARTTLS 587.\n"
+              f"Repo:  {os.environ.get('GITHUB_REPOSITORY')}\n"
+              f"Run:   {os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}\n"
+          )
+
+          context = ssl.create_default_context()
+          with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
+              s.ehlo()
+              s.starttls(context=context)
+              s.ehlo()
+              s.login(user, pwd)
+              s.send_message(msg)
+
+          print("OK: email enviado via Python")
+          PY
+

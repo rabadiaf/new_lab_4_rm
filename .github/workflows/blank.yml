@@ -21,7 +21,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Cache estable para Trivy
       - name: Cache Trivy DB
         uses: actions/cache@v4
         with:
@@ -34,45 +33,47 @@ jobs:
         run: |
           if ! command -v trivy >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+            sudo apt-get install -y wget apt-transport-https gnupg lsb-release mailutils
             wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
             echo deb https://aquasecurity.github.io/trivy-repo/deb stable main | sudo tee /etc/apt/sources.list.d/trivy.list
             sudo apt-get update
             sudo apt-get install -y trivy
           fi
 
+      - name: Prepare reports dir
+        run: mkdir -p reports
+
       - name: Trivy FS scan (repo & manifests)
         run: |
+          set -o pipefail
           trivy fs \
             --cache-dir ~/.cache/trivy \
             --skip-update \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --no-progress \
-            .
+            . | tee reports/trivy_fs.txt
 
       - name: Build Docker image
-        run: |
-          docker build -t $IMAGE_NAME .
+        run: docker build -t $IMAGE_NAME .
 
       - name: Trivy image scan
         run: |
+          set -o pipefail
           trivy image \
             --cache-dir ~/.cache/trivy \
             --skip-update \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --no-progress \
-            $IMAGE_NAME
+            $IMAGE_NAME | tee reports/trivy_image.txt
 
-      # Login a Docker Hub usando secrets del repo
       - name: Login to Docker Hub
         run: |
           docker login -u "$DOCKERHUB_USERNAME" --password-stdin <<< "$DOCKERHUB_PASSWORD"
 
       - name: Push image
-        run: |
-          docker push $IMAGE_NAME
+        run: docker push $IMAGE_NAME
 
       - name: Apply deployment
         run: kubectl apply -f deployment.yml
@@ -86,5 +87,43 @@ jobs:
           kubectl apply -f pod.yml
 
       - name: Get pods
-        run: kubectl get pods -o wide
+        run: |
+          kubectl get pods -o wide | tee reports/pods.txt
+
+      - name: Upload reports as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-reports
+          path: reports/
+
+      - name: Email reports (Trivy + Pods)
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "CI Report – ${{ github.repository }} #${{ github.run_number }}"
+          from: ${{ secrets.FROM_EMAIL }}
+          to: ${{ secrets.TO_EMAIL }}
+          content_type: text/plain
+          body: |
+            ✅ CI/CD Run Summary:
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Se adjuntan los reportes generados:
+            - Trivy FS Scan
+            - Trivy Image Scan
+            - kubectl get pods
+
+            Estado final del workflow: ${{ job.status }}
+          attachments: |
+            reports/trivy_fs.txt
+            reports/trivy_image.txt
+            reports/pods.txt
 

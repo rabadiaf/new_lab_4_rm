@@ -6,5 +6,5 @@ spec:
   containers:
     - name: my-container
       image: nginx
-      port:
+      ports:
         - containerPort: 80

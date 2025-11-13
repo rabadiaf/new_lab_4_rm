@@ -78,8 +78,16 @@ jobs:
       - name: Apply deployment
         run: kubectl apply -f deployment.yml
 
-      - name: Describe deployment
-        run: kubectl describe deploy $DEPLOYMENT_NAME
+      # ---- Describe dinámico de todos los deployments que empiecen con my-app ----
+      - name: Describe deployments starting with my-app
+        run: |
+          echo "🔍 Checking deployments starting with 'my-app'..."
+          kubectl get deploy --no-headers -o custom-columns=":metadata.name" | grep '^my-app' | while read dep; do
+            echo "-----------------------------------------------"
+            echo "📄 Describing $dep ..."
+            kubectl describe deploy "$dep" | tee -a reports/deployments.txt
+            echo "-----------------------------------------------"
+          done
 
       - name: Apply pod manifest
         run: |
@@ -98,17 +106,17 @@ jobs:
           path: reports/
 
       # ---- EMAIL OK: usa @v6, STARTTLS 587 y from=username ----
-      - name: Email reports (Trivy + Pods)
+      - name: Email reports (Trivy + Pods + Deployments)
         if: always()
         uses: dawidd6/action-send-mail@v6
         with:
           server_address: smtp.gmail.com
-          server_port: 587              # STARTTLS (más compatible)
-          secure: false                 # la acción negocia STARTTLS
-          username: ${{ secrets.SMTP_USERNAME }}   # ej: rabadiaf@gmail.com
-          password: ${{ secrets.SMTP_PASSWORD }}   # App Password (16 chars, sin espacios)
-          from:     ${{ secrets.SMTP_USERNAME }}   # igual que username
-          to:       ${{ secrets.TO_EMAIL }}        # ej: rabadiaf@gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          from:     ${{ secrets.SMTP_USERNAME }}
+          to:       ${{ secrets.TO_EMAIL }}
           subject:  "CI Report – ${{ github.repository }} #${{ github.run_number }}"
           body: |
             ✅ CI/CD Run Summary:
@@ -120,12 +128,14 @@ jobs:
             - Trivy FS Scan
             - Trivy Image Scan
             - kubectl get pods
+            - kubectl describe deploy (todos los 'my-app*')
 
             Estado final del workflow: ${{ job.status }}
           attachments: |
             reports/trivy_fs.txt
             reports/trivy_image.txt
             reports/pods.txt
+            reports/deployments.txt
           nodemailerlog: true
           nodemailerdebug: true
 

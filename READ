@@ -1,1 +1,2 @@
 Here I created k8 deployment and pod , push it on github actions con trivy y push una image a docker hub
+with email

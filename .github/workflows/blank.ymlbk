@@ -6,27 +6,14 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
-    inputs:
-      app_prefix:
-        description: "Prefijo de los deployments/Services (ej: my-app)"
-        required: false
-        default: "my-app"
-      image_tag:
-        description: "Tag de la imagen Docker (si se omite, se usa el run_number)"
-        required: false
-        default: ""
 
 jobs:
   build:
     runs-on: self-hosted
 
     env:
-      # Prefijo para deployments/Services (viene del input o default)
-      APP_PREFIX: ${{ inputs.app_prefix || 'my-app' }}
-      # Tag de la imagen (input o, si está vacío, el run_number del workflow)
-      IMAGE_TAG: ${{ inputs.image_tag != '' && inputs.image_tag || github.run_number }}
-      # Imagen final con tag dinámico
-      IMAGE_NAME: rabadiaf/k8s-lab:${{ inputs.image_tag != '' && inputs.image_tag || github.run_number }}
+      DEPLOYMENT_NAME: my-app7
+      IMAGE_NAME: rabadiaf/k8s-lab:latest
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
@@ -68,7 +55,7 @@ jobs:
             . | tee reports/trivy_fs.txt
 
       - name: Build Docker image
-        run: docker build -t "$IMAGE_NAME" .
+        run: docker build -t $IMAGE_NAME .
 
       - name: Trivy image scan
         run: |
@@ -79,44 +66,28 @@ jobs:
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --no-progress \
-            "$IMAGE_NAME" | tee reports/trivy_image.txt
+            $IMAGE_NAME | tee reports/trivy_image.txt
 
       - name: Login to Docker Hub
         run: |
           docker login -u "$DOCKERHUB_USERNAME" --password-stdin <<< "$DOCKERHUB_PASSWORD"
 
       - name: Push image
-        run: docker push "$IMAGE_NAME"
+        run: docker push $IMAGE_NAME
 
       - name: Apply deployment
         run: kubectl apply -f deployment.yml
 
-      # Opcional: script externo para validar deployment+service según prefix
-      # Asumiendo que tienes scripts/check_deploy_and_service.sh en el repo
-      - name: Check deployment and service for prefix
+      # ---- Describe dinámico de todos los deployments que empiecen con my-app ----
+      - name: Describe deployments starting with my-app
         run: |
-          if [ -x scripts/check_deploy_and_service.sh ]; then
-            echo "Ejecutando check_deploy_and_service.sh con prefix $APP_PREFIX..."
-            scripts/check_deploy_and_service.sh "$APP_PREFIX"
-          else
-            echo "scripts/check_deploy_and_service.sh no existe o no es ejecutable, se omite."
-          fi
-
-      # ---- Describe dinámico de todos los deployments que empiecen con APP_PREFIX ----
-      - name: Describe deployments starting with prefix
-        run: |
-          echo "🔍 Checking deployments starting with '$APP_PREFIX'..."
-          deps=$(kubectl get deploy --no-headers -o custom-columns=":metadata.name" | grep "^$APP_PREFIX" || true)
-          if [ -z "$deps" ]; then
-            echo "⚠️ No hay deployments que empiecen con '$APP_PREFIX'"
-          else
-            echo "$deps" | while read dep; do
-              echo "-----------------------------------------------"
-              echo "📄 Describing $dep ..."
-              kubectl describe deploy "$dep" | tee -a reports/deployments.txt
-              echo "-----------------------------------------------"
-            done
-          fi
+          echo "🔍 Checking deployments starting with 'my-app'..."
+          kubectl get deploy --no-headers -o custom-columns=":metadata.name" | grep '^my-app' | while read dep; do
+            echo "-----------------------------------------------"
+            echo "📄 Describing $dep ..."
+            kubectl describe deploy "$dep" | tee -a reports/deployments.txt
+            echo "-----------------------------------------------"
+          done
 
       - name: Apply pod manifest
         run: |
@@ -134,6 +105,7 @@ jobs:
           name: all-reports
           path: reports/
 
+      # ---- EMAIL OK: usa @v6, STARTTLS 587 y from=username ----
       - name: Email reports (Trivy + Pods + Deployments)
         if: always()
         uses: dawidd6/action-send-mail@v6
@@ -152,18 +124,11 @@ jobs:
             Branch: ${{ github.ref_name }}
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            Inputs:
-            - app_prefix: ${{ inputs.app_prefix || 'my-app' }}
-            - image_tag:  ${{ inputs.image_tag != '' && inputs.image_tag || github.run_number }}
-
-            Imagen construida:
-            - ${{ env.IMAGE_NAME }}
-
             Se adjuntan los reportes generados:
             - Trivy FS Scan
             - Trivy Image Scan
             - kubectl get pods
-            - kubectl describe deploy (prefijo '${{ env.APP_PREFIX }}')
+            - kubectl describe deploy (todos los 'my-app*')
 
             Estado final del workflow: ${{ job.status }}
           attachments: |

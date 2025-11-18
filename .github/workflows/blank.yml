@@ -31,8 +31,6 @@ jobs:
       DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
 
       - name: Cache Trivy DB
         uses: actions/cache@v4
